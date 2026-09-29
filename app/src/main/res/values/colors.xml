@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ink">#172C3A</color>
+    <color name="ink_muted">#5A6C75</color>
+    <color name="sea">#0F766E</color>
+    <color name="sea_dark">#0A5A55</color>
+    <color name="sea_soft">#DDF3EF</color>
+    <color name="sun">#E9A23B</color>
+    <color name="paper">#F7F8F4</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="line">#DCE3DF</color>
+    <color name="danger">#B94A48</color>
+</resources>

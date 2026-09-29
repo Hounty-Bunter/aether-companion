@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="protocol_labels">
+        <item>MASQUE · Recommended</item>
+        <item>WireGuard · Fast</item>
+        <item>Double WireGuard · Strict networks</item>
+    </string-array>
+    <string-array name="scan_labels">
+        <item>Balanced · Recommended</item>
+        <item>Turbo · Fastest start</item>
+        <item>Thorough · Better search</item>
+        <item>Stealth · Quieter search</item>
+        <item>Ironclad · Most certain</item>
+    </string-array>
+    <string-array name="ip_labels">
+        <item>IPv4 · Recommended</item>
+        <item>IPv6</item>
+        <item>IPv4 + IPv6</item>
+    </string-array>
+    <string-array name="carrier_labels">
+        <item>HTTP/3 · Faster</item>
+        <item>HTTP/2 · If UDP is blocked</item>
+    </string-array>
+    <string-array name="camouflage_labels">
+        <item>Recommended</item>
+        <item>Stronger</item>
+        <item>Light</item>
+        <item>Off</item>
+    </string-array>
+</resources>

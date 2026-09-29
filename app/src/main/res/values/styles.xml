@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.AetherCompanion" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@color/paper</item>
+        <item name="android:navigationBarColor">@color/paper</item>
+        <item name="android:colorAccent">@color/sea</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+
+    <style name="Text.Eyebrow">
+        <item name="android:textColor">@color/sea</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.14</item>
+    </style>
+
+    <style name="Text.Title">
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">30sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:lineSpacingMultiplier">0.92</item>
+    </style>
+
+    <style name="Text.Section">
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Text.Body">
+        <item name="android:textColor">@color/ink_muted</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:lineSpacingExtra">3dp</item>
+    </style>
+
+    <style name="Widget.Label">
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+</resources>

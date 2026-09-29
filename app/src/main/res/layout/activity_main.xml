@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/paper"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="22dp"
+        android:paddingTop="28dp"
+        android:paddingEnd="22dp"
+        android:paddingBottom="40dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/eyebrow"
+            style="@style/Text.Eyebrow" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/title"
+            style="@style/Text.Title" />
+
+        <LinearLayout
+            android:id="@+id/statusCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/status_background"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <View
+                android:id="@+id/statusDot"
+                android:layout_width="74dp"
+                android:layout_height="74dp"
+                android:background="@drawable/status_dot_off"
+                android:contentDescription="Connection indicator" />
+
+            <TextView
+                android:id="@+id/statusTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/status_checking"
+                android:textColor="@color/ink"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/statusDetail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:gravity="center"
+                android:text="@string/status_off_detail"
+                style="@style/Text.Body" />
+
+            <Button
+                android:id="@+id/primaryButton"
+                android:layout_width="match_parent"
+                android:layout_height="58dp"
+                android:layout_marginTop="20dp"
+                android:background="@drawable/button_primary"
+                android:text="@string/start"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/setupCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/card_background"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_title"
+                style="@style/Text.Section" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/setup_body"
+                style="@style/Text.Body" />
+
+            <Button
+                android:id="@+id/copySetupButton"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/button_secondary"
+                android:text="@string/copy_setup"
+                android:textAllCaps="false"
+                android:textColor="@color/sea_dark"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/openTermuxButton"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/button_secondary"
+                android:text="@string/open_termux"
+                android:textAllCaps="false"
+                android:textColor="@color/sea_dark"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/permissionButton"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/button_secondary"
+                android:text="@string/grant_permission"
+                android:textAllCaps="false"
+                android:textColor="@color/sea_dark"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/settingsCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/card_background"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/connection_title"
+                style="@style/Text.Section" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:text="@string/protocol" style="@style/Widget.Label" />
+            <Spinner android:id="@+id/protocolSpinner" android:layout_width="match_parent" android:layout_height="52dp" android:entries="@array/protocol_labels" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/scan" style="@style/Widget.Label" />
+            <Spinner android:id="@+id/scanSpinner" android:layout_width="match_parent" android:layout_height="52dp" android:entries="@array/scan_labels" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/ip_version" style="@style/Widget.Label" />
+            <Spinner android:id="@+id/ipSpinner" android:layout_width="match_parent" android:layout_height="52dp" android:entries="@array/ip_labels" />
+
+            <LinearLayout
+                android:id="@+id/masqueOptions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/carrier" style="@style/Widget.Label" />
+                <Spinner android:id="@+id/carrierSpinner" android:layout_width="match_parent" android:layout_height="52dp" android:entries="@array/carrier_labels" />
+
+                <CheckBox
+                    android:id="@+id/fragmentCheck"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:buttonTint="@color/sea"
+                    android:text="@string/fragment"
+                    android:textColor="@color/ink" />
+            </LinearLayout>
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/obfuscation" style="@style/Widget.Label" />
+            <Spinner android:id="@+id/camouflageSpinner" android:layout_width="match_parent" android:layout_height="52dp" android:entries="@array/camouflage_labels" />
+
+            <CheckBox
+                android:id="@+id/quickReconnectCheck"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:buttonTint="@color/sea"
+                android:checked="true"
+                android:text="@string/quick_reconnect"
+                android:textColor="@color/ink" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="@string/port" style="@style/Widget.Label" />
+            <EditText
+                android:id="@+id/portInput"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:autofillHints=""
+                android:hint="1819"
+                android:inputType="number"
+                android:maxLength="5"
+                android:text="1819"
+                android:textColor="@color/ink"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/save_hint"
+                style="@style/Text.Body" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/card_background"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/proxy_note_title"
+                style="@style/Text.Section" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/proxy_note_body"
+                style="@style/Text.Body" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

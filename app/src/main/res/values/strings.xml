@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aether Companion</string>
+    <string name="eyebrow">AETHER AT HOME</string>
+    <string name="title">A simple switch for a safer route.</string>
+    <string name="status_checking">Checking Aether…</string>
+    <string name="status_off">Aether is off</string>
+    <string name="status_off_detail">Tap Start when you want the local proxy.</string>
+    <string name="status_starting">Starting Aether…</string>
+    <string name="status_starting_detail">Finding a working route can take a minute.</string>
+    <string name="status_on">Aether is ready</string>
+    <string name="status_on_detail">SOCKS5 is listening on 127.0.0.1:%1$d</string>
+    <string name="status_stopping">Stopping Aether…</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="setup_title">First-time setup needed</string>
+    <string name="setup_body">Termux runs the Aether engine. Install it, run the one-time setup command there, then allow this app to run Termux commands.</string>
+    <string name="copy_setup">Copy setup command</string>
+    <string name="open_termux">Open Termux</string>
+    <string name="grant_permission">Allow Termux control</string>
+    <string name="connection_title">Connection choices</string>
+    <string name="protocol">Route type</string>
+    <string name="scan">Search effort</string>
+    <string name="ip_version">Network addresses</string>
+    <string name="carrier">MASQUE carrier</string>
+    <string name="obfuscation">Camouflage</string>
+    <string name="quick_reconnect">Reconnect quickly next time</string>
+    <string name="fragment">Extra TLS camouflage (HTTP/2 only)</string>
+    <string name="port">Local SOCKS5 port</string>
+    <string name="save_hint">Choices are saved automatically.</string>
+    <string name="proxy_note_title">What this protects</string>
+    <string name="proxy_note_body">Aether creates a local SOCKS5 proxy. Only apps configured to use 127.0.0.1 and the port above will use it. This companion does not create an Android device-wide VPN.</string>
+    <string name="copied">Setup command copied. Paste it in Termux and press Enter.</string>
+    <string name="termux_missing">Install the current Termux app from F-Droid or GitHub first.</string>
+    <string name="permission_missing">Allow “Run commands in Termux” for Aether Companion, then return here.</string>
+    <string name="external_apps_missing">If nothing starts, run the setup command in Termux once.</string>
+    <string name="invalid_port">Use a port between 1024 and 65535.</string>
+    <string name="start_failed">Termux could not start Aether: %1$s</string>
+    <string name="stop_sent">Stop request sent.</string>
+</resources>
