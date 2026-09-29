@@ -9,33 +9,33 @@
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 
-    <style name="Text.Eyebrow">
+    <style name="Text.Eyebrow" parent="">
         <item name="android:textColor">@color/sea</item>
         <item name="android:textSize">12sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">0.14</item>
     </style>
 
-    <style name="Text.Title">
+    <style name="Text.Title" parent="">
         <item name="android:textColor">@color/ink</item>
         <item name="android:textSize">30sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:lineSpacingMultiplier">0.92</item>
     </style>
 
-    <style name="Text.Section">
+    <style name="Text.Section" parent="">
         <item name="android:textColor">@color/ink</item>
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
     </style>
 
-    <style name="Text.Body">
+    <style name="Text.Body" parent="">
         <item name="android:textColor">@color/ink_muted</item>
         <item name="android:textSize">15sp</item>
         <item name="android:lineSpacingExtra">3dp</item>
     </style>
 
-    <style name="Widget.Label">
+    <style name="Widget.Label" parent="">
         <item name="android:textColor">@color/ink</item>
         <item name="android:textSize">14sp</item>
         <item name="android:textStyle">bold</item>
