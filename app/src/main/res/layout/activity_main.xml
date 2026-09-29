@@ -63,17 +63,72 @@
                 android:text="@string/status_off_detail"
                 style="@style/Text.Body" />
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/exit_ip" style="@style/Text.Eyebrow" />
+                    <TextView android:id="@+id/exitIpValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="—" android:textColor="@color/ink" android:textSize="16sp" android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/duration" style="@style/Text.Eyebrow" />
+                    <TextView android:id="@+id/durationValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="00:00:00" android:textColor="@color/ink" android:textSize="16sp" android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
             <Button
                 android:id="@+id/primaryButton"
                 android:layout_width="match_parent"
                 android:layout_height="58dp"
                 android:layout_marginTop="20dp"
                 android:background="@drawable/button_primary"
-                android:text="@string/start"
+                android:text="@string/connect"
                 android:textAllCaps="false"
                 android:textColor="@color/white"
                 android:textSize="18sp"
                 android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/card_background"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/logs_title"
+                style="@style/Text.Section" />
+
+            <TextView
+                android:id="@+id/logsValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="3dp"
+                android:minHeight="72dp"
+                android:text="@string/logs_empty"
+                android:textColor="@color/ink_muted"
+                android:textIsSelectable="true"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <LinearLayout

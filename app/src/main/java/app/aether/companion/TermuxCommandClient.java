@@ -26,7 +26,10 @@ final class TermuxCommandClient {
     private static final String AETHER = PREFIX + "/bin/aether";
 
     private static final String START_WRAPPER =
-            "umask 077; printf '%s\\n' \"$$\" > \"$HOME/.aether-companion.pid\"; exec \"$@\"";
+            "umask 077; \"$@\" & p=$!; " +
+            "printf '%s\\n' \"$p\" > \"$HOME/.aether-companion.pid\"; " +
+            "trap 'kill -TERM \"$p\" 2>/dev/null' TERM INT; " +
+            "wait \"$p\"; s=$?; rm -f \"$HOME/.aether-companion.pid\"; exit \"$s\"";
 
     private static final String STOP_WRAPPER =
             "f=\"$HOME/.aether-companion.pid\"; " +

@@ -1,5 +1,6 @@
 package app.aether.companion;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -7,6 +8,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.net.VpnService;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -21,12 +24,12 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Locale;
 
 public final class MainActivity extends Activity {
     private static final int REQUEST_TERMUX_PERMISSION = 41;
+    private static final int REQUEST_NOTIFICATION_PERMISSION = 42;
+    private static final int REQUEST_VPN_PERMISSION = 43;
     private static final String SETUP_COMMAND =
             "mkdir -p ~/.termux && grep -qxF 'allow-external-apps=true' ~/.termux/termux.properties 2>/dev/null || " +
             "echo 'allow-external-apps=true' >> ~/.termux/termux.properties; " +
@@ -35,17 +38,16 @@ public final class MainActivity extends Activity {
             "chmod +x ~/aether.sh && ~/aether.sh install";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ExecutorService probeExecutor = Executors.newSingleThreadExecutor();
-    private final AtomicBoolean probeInFlight = new AtomicBoolean(false);
-
     private SharedPreferences preferences;
     private TermuxCommandClient termux;
     private boolean resumed;
-    private UiState state = UiState.OFF;
 
     private View statusDot;
     private TextView statusTitle;
     private TextView statusDetail;
+    private TextView exitIpValue;
+    private TextView durationValue;
+    private TextView logsValue;
     private Button primaryButton;
     private LinearLayout setupCard;
     private LinearLayout settingsCard;
@@ -59,10 +61,10 @@ public final class MainActivity extends Activity {
     private CheckBox quickReconnectCheck;
     private EditText portInput;
 
-    private final Runnable probeLoop = new Runnable() {
+    private final Runnable renderLoop = new Runnable() {
         @Override public void run() {
-            probeOnce();
-            if (resumed) handler.postDelayed(this, 1800);
+            render(VpnStateStore.read(MainActivity.this));
+            if (resumed) handler.postDelayed(this, 1000);
         }
     };
 
@@ -70,13 +72,13 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        preferences = getSharedPreferences("aether", MODE_PRIVATE);
+        preferences = getSharedPreferences(VpnStateStore.PREFS, MODE_PRIVATE);
         termux = new TermuxCommandClient(this);
         bindViews();
         restoreSettings();
         wireActions();
         refreshSetupCard();
-        render(UiState.OFF);
+        render(VpnStateStore.read(this));
     }
 
     @Override
@@ -84,28 +86,25 @@ public final class MainActivity extends Activity {
         super.onResume();
         resumed = true;
         refreshSetupCard();
-        handler.removeCallbacks(probeLoop);
-        handler.post(probeLoop);
+        handler.removeCallbacks(renderLoop);
+        handler.post(renderLoop);
     }
 
     @Override
     protected void onPause() {
         resumed = false;
-        handler.removeCallbacks(probeLoop);
+        handler.removeCallbacks(renderLoop);
         saveSettings(false);
         super.onPause();
-    }
-
-    @Override
-    protected void onDestroy() {
-        probeExecutor.shutdownNow();
-        super.onDestroy();
     }
 
     private void bindViews() {
         statusDot = findViewById(R.id.statusDot);
         statusTitle = findViewById(R.id.statusTitle);
         statusDetail = findViewById(R.id.statusDetail);
+        exitIpValue = findViewById(R.id.exitIpValue);
+        durationValue = findViewById(R.id.durationValue);
+        logsValue = findViewById(R.id.logsValue);
         primaryButton = findViewById(R.id.primaryButton);
         setupCard = findViewById(R.id.setupCard);
         settingsCard = findViewById(R.id.settingsCard);
@@ -135,7 +134,10 @@ public final class MainActivity extends Activity {
 
     private void wireActions() {
         primaryButton.setOnClickListener(view -> {
-            if (state == UiState.ON || state == UiState.STARTING) stopAether(); else startAether();
+            VpnStateStore.Snapshot state = VpnStateStore.read(this);
+            if (VpnStateStore.CONNECTED.equals(state.state) ||
+                    VpnStateStore.CONNECTING.equals(state.state)) disconnect();
+            else beginConnect();
         });
         findViewById(R.id.copySetupButton).setOnClickListener(view -> copySetupCommand());
         findViewById(R.id.openTermuxButton).setOnClickListener(view -> openTermux());
@@ -149,7 +151,7 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void startAether() {
+    private void beginConnect() {
         if (!termux.isInstalled()) {
             toast(R.string.termux_missing);
             setupCard.setVisibility(View.VISIBLE);
@@ -159,39 +161,41 @@ public final class MainActivity extends Activity {
             requestTermuxPermission();
             return;
         }
-        AetherSettings settings = saveSettings(true);
-        if (settings == null) return;
-        try {
-            termux.startAether(settings.commandArguments());
-            render(UiState.STARTING);
-        } catch (Exception error) {
-            render(UiState.OFF);
-            Toast.makeText(this, getString(R.string.start_failed, readable(error)), Toast.LENGTH_LONG).show();
+        if (Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQUEST_NOTIFICATION_PERMISSION);
+            return;
+        }
+        requestVpnPermission();
+    }
+
+    private void requestVpnPermission() {
+        if (saveSettings(true) == null) return;
+        Intent permission = VpnService.prepare(this);
+        if (permission == null) startVpn();
+        else startActivityForResult(permission, REQUEST_VPN_PERMISSION);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_VPN_PERMISSION) {
+            if (resultCode == RESULT_OK) startVpn();
+            else toast(R.string.vpn_permission_missing);
         }
     }
 
-    private void stopAether() {
-        try {
-            termux.stopAether();
-            render(UiState.STOPPING);
-            toast(R.string.stop_sent);
-        } catch (Exception error) {
-            Toast.makeText(this, getString(R.string.start_failed, readable(error)), Toast.LENGTH_LONG).show();
-        }
+    private void startVpn() {
+        Intent intent = new Intent(this, AetherVpnService.class).setAction(AetherVpnService.ACTION_CONNECT);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
+        else startService(intent);
     }
 
-    private void probeOnce() {
-        int port = parsePort(false);
-        if (port < 0 || !probeInFlight.compareAndSet(false, true)) return;
-        probeExecutor.execute(() -> {
-            boolean listening = SocksProbe.isListening(port);
-            probeInFlight.set(false);
-            handler.post(() -> {
-                if (!resumed) return;
-                if (listening) render(UiState.ON);
-                else if (state == UiState.ON || state == UiState.STOPPING) render(UiState.OFF);
-            });
-        });
+    private void disconnect() {
+        VpnStateStore.desired(this, false);
+        Intent intent = new Intent(this, AetherVpnService.class).setAction(AetherVpnService.ACTION_DISCONNECT);
+        startService(intent);
     }
 
     private AetherSettings saveSettings(boolean showErrors) {
@@ -222,16 +226,67 @@ public final class MainActivity extends Activity {
         return -1;
     }
 
+    private void render(VpnStateStore.Snapshot snapshot) {
+        statusDetail.setText(snapshot.detail.isEmpty() ? getString(R.string.status_off_detail) : snapshot.detail);
+        exitIpValue.setText(snapshot.exitIp);
+        durationValue.setText(formatDuration(snapshot.connectedAt));
+        logsValue.setText(snapshot.logs.isEmpty() ? getString(R.string.logs_empty) : snapshot.logs);
+
+        boolean active = VpnStateStore.CONNECTED.equals(snapshot.state) ||
+                VpnStateStore.CONNECTING.equals(snapshot.state);
+        setSettingsEnabled(!active);
+        primaryButton.setEnabled(true);
+        primaryButton.setText(active ? R.string.disconnect : R.string.connect);
+
+        if (VpnStateStore.CONNECTED.equals(snapshot.state)) {
+            statusDot.setBackgroundResource(R.drawable.status_dot_on);
+            statusTitle.setText(R.string.status_on);
+        } else if (VpnStateStore.CONNECTING.equals(snapshot.state)) {
+            statusDot.setBackgroundResource(R.drawable.status_dot_busy);
+            statusTitle.setText(R.string.status_starting);
+        } else if (VpnStateStore.ERROR.equals(snapshot.state)) {
+            statusDot.setBackgroundResource(R.drawable.status_dot_error);
+            statusTitle.setText(R.string.status_error);
+        } else {
+            statusDot.setBackgroundResource(R.drawable.status_dot_off);
+            statusTitle.setText(R.string.status_off);
+        }
+    }
+
+    private String formatDuration(long connectedAt) {
+        if (connectedAt <= 0) return "00:00:00";
+        long seconds = Math.max(0, (System.currentTimeMillis() - connectedAt) / 1000);
+        return String.format(Locale.US, "%02d:%02d:%02d",
+                seconds / 3600, (seconds % 3600) / 60, seconds % 60);
+    }
+
     private void updateConditionalSettings() {
-        boolean masque = protocolSpinner.getSelectedItemPosition() == 0;
+        int protocol = protocolSpinner.getSelectedItemPosition();
+        boolean masque = protocol == 0 || protocol == 3;
         masqueOptions.setVisibility(masque ? View.VISIBLE : View.GONE);
         fragmentCheck.setEnabled(carrierSpinner.getSelectedItemPosition() == 1);
         if (!fragmentCheck.isEnabled()) fragmentCheck.setChecked(false);
     }
 
+    private void setSettingsEnabled(boolean enabled) {
+        settingsCard.setAlpha(enabled ? 1f : 0.55f);
+        setChildrenEnabled(settingsCard, enabled);
+        if (enabled) updateConditionalSettings();
+    }
+
+    private static void setChildrenEnabled(android.view.ViewGroup group, boolean enabled) {
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            child.setEnabled(enabled);
+            if (child instanceof android.view.ViewGroup) {
+                setChildrenEnabled((android.view.ViewGroup) child, enabled);
+            }
+        }
+    }
+
     private void refreshSetupCard() {
-        boolean setupAcknowledged = preferences.getBoolean("setupAcknowledged", false);
-        boolean ready = termux.isInstalled() && termux.hasPermission() && setupAcknowledged;
+        boolean acknowledged = preferences.getBoolean("setupAcknowledged", false);
+        boolean ready = termux.isInstalled() && termux.hasPermission() && acknowledged;
         setupCard.setVisibility(ready ? View.GONE : View.VISIBLE);
     }
 
@@ -263,74 +318,25 @@ public final class MainActivity extends Activity {
             refreshSetupCard();
             return;
         }
-        requestPermissions(new String[]{TermuxCommandClient.RUN_COMMAND_PERMISSION}, REQUEST_TERMUX_PERMISSION);
+        requestPermissions(new String[]{TermuxCommandClient.RUN_COMMAND_PERMISSION},
+                REQUEST_TERMUX_PERMISSION);
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != REQUEST_TERMUX_PERMISSION) return;
-        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            refreshSetupCard();
-        } else {
-            toast(R.string.permission_missing);
-            Intent settingsIntent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.parse("package:" + getPackageName()));
-            startActivity(settingsIntent);
-        }
-    }
-
-    private void render(UiState newState) {
-        state = newState;
-        int port = parsePort(false);
-        if (port < 0) port = 1819;
-        switch (newState) {
-            case ON:
-                statusDot.setBackgroundResource(R.drawable.status_dot_on);
-                statusTitle.setText(R.string.status_on);
-                statusDetail.setText(getString(R.string.status_on_detail, port));
-                primaryButton.setText(R.string.stop);
-                primaryButton.setEnabled(true);
-                setSettingsEnabled(false);
-                break;
-            case STARTING:
-                statusDot.setBackgroundResource(R.drawable.status_dot_busy);
-                statusTitle.setText(R.string.status_starting);
-                statusDetail.setText(R.string.status_starting_detail);
-                primaryButton.setText(R.string.stop);
-                primaryButton.setEnabled(true);
-                setSettingsEnabled(false);
-                break;
-            case STOPPING:
-                statusDot.setBackgroundResource(R.drawable.status_dot_busy);
-                statusTitle.setText(R.string.status_stopping);
-                statusDetail.setText(R.string.status_off_detail);
-                primaryButton.setText(R.string.stop);
-                primaryButton.setEnabled(false);
-                setSettingsEnabled(false);
-                break;
-            default:
-                statusDot.setBackgroundResource(R.drawable.status_dot_off);
-                statusTitle.setText(R.string.status_off);
-                statusDetail.setText(R.string.status_off_detail);
-                primaryButton.setText(R.string.start);
-                primaryButton.setEnabled(true);
-                setSettingsEnabled(true);
-        }
-    }
-
-    private void setSettingsEnabled(boolean enabled) {
-        settingsCard.setAlpha(enabled ? 1f : 0.55f);
-        setChildrenEnabled(settingsCard, enabled);
-        if (enabled) updateConditionalSettings();
-    }
-
-    private static void setChildrenEnabled(android.view.ViewGroup group, boolean enabled) {
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            child.setEnabled(enabled);
-            if (child instanceof android.view.ViewGroup) {
-                setChildrenEnabled((android.view.ViewGroup) child, enabled);
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        boolean granted = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
+        if (requestCode == REQUEST_NOTIFICATION_PERMISSION) {
+            if (granted) requestVpnPermission();
+            else toast(R.string.notification_permission_missing);
+        } else if (requestCode == REQUEST_TERMUX_PERMISSION) {
+            if (granted) {
+                refreshSetupCard();
+                beginConnect();
+            } else {
+                toast(R.string.permission_missing);
+                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName())));
             }
         }
     }
@@ -338,13 +344,6 @@ public final class MainActivity extends Activity {
     private void toast(int stringId) {
         Toast.makeText(this, stringId, Toast.LENGTH_LONG).show();
     }
-
-    private static String readable(Exception error) {
-        String message = error.getMessage();
-        return message == null || message.trim().isEmpty() ? error.getClass().getSimpleName() : message;
-    }
-
-    private enum UiState { OFF, STARTING, ON, STOPPING }
 
     private abstract static class SimpleSelectionListener implements AdapterView.OnItemSelectedListener {
         abstract void selected();

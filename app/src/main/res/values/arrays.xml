@@ -4,6 +4,7 @@
         <item>MASQUE · Recommended</item>
         <item>WireGuard · Fast</item>
         <item>Double WireGuard · Strict networks</item>
+        <item>Double MASQUE · Different exit</item>
     </string-array>
     <string-array name="scan_labels">
         <item>Balanced · Recommended</item>
@@ -24,7 +25,7 @@
     <string-array name="camouflage_labels">
         <item>Recommended</item>
         <item>Stronger</item>
-        <item>Light</item>
+        <item>Low overhead</item>
         <item>Off</item>
     </string-array>
 </resources>

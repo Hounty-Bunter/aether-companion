@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 final class AetherSettings {
-    static final String[] PROTOCOLS = {"masque", "wg", "gool"};
+    static final String[] PROTOCOLS = {"masque", "wg", "gool", "mim"};
     static final String[] SCANS = {"balanced", "turbo", "thorough", "stealth", "ironclad"};
     static final String[] IPS = {"4", "6", "dual"};
 
@@ -56,10 +56,10 @@ final class AetherSettings {
         args.add("--bind");
         args.add("127.0.0.1:" + port);
         args.add(quickReconnect ? "--quick-reconnect" : "--no-quick-reconnect");
-        if (protocolIndex == 0 && carrierIndex == 1) {
+        if (isMasqueFamily() && carrierIndex == 1) {
             args.add("--h2");
             if (fragment) args.add("--fragment");
-        } else if (protocolIndex == 0) {
+        } else if (isMasqueFamily()) {
             args.add("--h3");
         }
         return args.toArray(new String[0]);
@@ -72,12 +72,16 @@ final class AetherSettings {
     }
 
     private String noizeProfile() {
-        if (protocolIndex == 0) {
+        if (isMasqueFamily()) {
             String[] masqueProfiles = {"firewall", "gfw", "off", "off"};
             return masqueProfiles[camouflageIndex];
         }
         String[] wireGuardProfiles = {"balanced", "aggressive", "light", "off"};
         return wireGuardProfiles[camouflageIndex];
+    }
+
+    boolean isMasqueFamily() {
+        return protocolIndex == 0 || protocolIndex == 3;
     }
 
     private static int bounded(int value, int size) {
