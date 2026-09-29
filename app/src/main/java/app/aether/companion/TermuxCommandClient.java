@@ -1,5 +1,6 @@
 package app.aether.companion;
 
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -19,6 +20,7 @@ final class TermuxCommandClient {
     private static final String EXTRA_WORKDIR = "com.termux.RUN_COMMAND_WORKDIR";
     private static final String EXTRA_BACKGROUND = "com.termux.RUN_COMMAND_BACKGROUND";
     private static final String EXTRA_LABEL = "com.termux.RUN_COMMAND_COMMAND_LABEL";
+    private static final String EXTRA_PENDING_INTENT = "com.termux.RUN_COMMAND_PENDING_INTENT";
 
     private static final String HOME = "/data/data/com.termux/files/home";
     private static final String PREFIX = "/data/data/com.termux/files/usr";
@@ -72,11 +74,21 @@ final class TermuxCommandClient {
         sendBackground(BASH, new String[]{"-lc", STOP_WRAPPER}, "Stop Aether");
     }
 
+    void checkAetherInstallation(PendingIntent result) {
+        String check = "if [ ! -x '" + AETHER + "' ]; then echo AETHER_MISSING; exit 20; fi; " +
+                "echo AETHER_READY";
+        sendBackground(BASH, new String[]{"-lc", check}, "Check Aether", result);
+    }
+
     Intent launchIntent() {
         return context.getPackageManager().getLaunchIntentForPackage(TERMUX_PACKAGE);
     }
 
     private void sendBackground(String path, String[] arguments, String label) {
+        sendBackground(path, arguments, label, null);
+    }
+
+    private void sendBackground(String path, String[] arguments, String label, PendingIntent result) {
         Intent intent = new Intent();
         intent.setClassName(TERMUX_PACKAGE, RUN_COMMAND_SERVICE);
         intent.setAction(ACTION_RUN_COMMAND);
@@ -85,6 +97,7 @@ final class TermuxCommandClient {
         intent.putExtra(EXTRA_WORKDIR, HOME);
         intent.putExtra(EXTRA_BACKGROUND, true);
         intent.putExtra(EXTRA_LABEL, label);
+        if (result != null) intent.putExtra(EXTRA_PENDING_INTENT, result);
         context.startService(intent);
     }
 }

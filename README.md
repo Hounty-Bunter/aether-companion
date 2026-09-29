@@ -1,70 +1,120 @@
-# Aether Companion for Android
+# Aether Companion VPN for Android
 
-A small Android controller for [CluvexStudio/Aether](https://github.com/CluvexStudio/Aether) running inside Termux. It is designed for a nontechnical family member: choose a route, tap **Start**, and read one clear status.
+Aether Companion is a one-tap Android VPN front end for
+[CluvexStudio/Aether](https://github.com/CluvexStudio/Aether). It starts Aether in
+Termux, waits for Aether's local SOCKS5 listener, verifies that the proxy can
+reach the internet, and then routes Android traffic through it with Android's
+`VpnService` and `hev-socks5-tunnel`.
 
-## What it does
+No V2Ray app or manual SOCKS5 configuration is required during normal use.
 
-- Starts Aether through Termux's documented `RUN_COMMAND` service.
-- Passes non-interactive Aether v2.1.0 flags for protocol, scan mode, IP family, obfuscation, MASQUE carrier, TLS fragmentation, quick reconnect, and local port.
-- Keeps the Aether identity files in Termux, where the official installer puts the executable and Aether writes its persistent configuration.
-- Detects readiness by completing a SOCKS5 method negotiation with `127.0.0.1:<port>`.
-- Stops only the process whose PID this companion recorded and whose command line still contains `aether`.
+> This is a beta. The build and automated tests pass, but the complete VPN path
+> still needs testing on representative physical Android devices before it can
+> be described as production-ready or leak-proof.
 
-## Important limitation
+## What is implemented
 
-This is **not** an Android `VpnService`. Aether v2.1.0 exposes an unauthenticated local SOCKS5 listener; it does not install an Android network interface or route every app automatically. Only apps that support SOCKS5 and are configured to use `127.0.0.1:1819` (or the selected port) will use Aether.
+- Android `VpnService` with a foreground-service notification and Android's VPN
+  permission flow.
+- Full IPv4 (`0.0.0.0/0`) and IPv6 (`::/0`) routes into the TUN interface.
+- IPv4 and IPv6 DNS servers whose traffic follows the same captured routes.
+- `hev-socks5-tunnel` 2.18.0 for TCP and UDP forwarding into Aether's SOCKS5
+  listener at `127.0.0.1:1819` (or the selected local port).
+- Aether and the native bridge are excluded from the VPN path to prevent routing
+  loops. Android performs this exclusion by application UID, so all Termux
+  traffic—not only Aether—is outside the VPN.
+- A fixed, allow-listed command interface for MASQUE, WireGuard, gool and MIM,
+  plus scan, IP-family, obfuscation, carrier, fragmentation, reconnect and port
+  settings supported by Aether's CLI.
+- Readiness and end-to-end HTTPS checks through SOCKS5 before the UI reports
+  **Connected**, followed by ongoing health checks.
+- Exit IP, connection duration, status, logs and actionable error messages.
+- Clean disconnect of the TUN interface, tun2socks, and only the Aether process
+  whose PID this app recorded. Other Termux processes are not signalled.
 
-A real device-wide mode would require a separately implemented and tested `VpnService` plus a packet-to-SOCKS bridge such as tun2socks, including protecting Aether's own outbound sockets from the VPN to avoid a routing loop. This project deliberately does not claim that capability.
+## First-time setup
 
-## First run on the phone
+Requirements: Android 10 or newer, a current Termux build, and Aether installed
+inside Termux.
 
-1. Install a current Termux build from [F-Droid](https://f-droid.org/packages/com.termux/) or the [official Termux releases](https://github.com/termux/termux-app/releases). The obsolete Play Store build is not suitable.
-2. Open Aether Companion and tap **Copy setup command**.
-3. Tap **Open Termux**, paste, and run the command. It:
-   - enables Termux's required `allow-external-apps=true` setting;
-   - downloads Aether's official installer;
-   - lets the installer select and verify the correct Android binary.
-4. Return to Aether Companion and tap **Allow Termux control**. Android should show the custom **Run commands in Termux environment** permission.
-5. Leave the recommended settings selected and tap **Start**.
+1. Install Termux from [F-Droid](https://f-droid.org/packages/com.termux/) or
+   the [official Termux releases](https://github.com/termux/termux-app/releases).
+   Do not use the obsolete Play Store build.
+2. Open Aether Companion and use **Copy setup command**.
+3. Open Termux once, paste the command, and let Aether's official installer
+   finish. The setup also enables Termux's `allow-external-apps=true` option.
+4. Return to Aether Companion and allow Termux command access and Android VPN
+   access when prompted.
+5. Select a protocol and tap **Connect**.
 
-If a phone vendor aggressively stops Termux, remove battery restrictions for Termux. Aether also needs Termux to remain installed. The app never receives Aether's config files, private keys, or terminal output.
+After setup, day-to-day use is: open Aether Companion, tap **Connect**, and wait
+for the verified **Connected** state.
 
-## How commands are passed
+Some Android vendors aggressively suspend Termux. If connections die in the
+background, remove battery restrictions for both Termux and Aether Companion.
 
-The companion invokes Termux's Bash by absolute path and passes Aether as positional arguments—there is no concatenation of UI text into a shell command. All selectable values come from fixed allow-lists. The effective command is equivalent to:
+## Connection sequence
+
+1. Verify Termux, its command permission, and the Aether executable.
+2. Launch Aether with non-interactive CLI arguments through Termux's documented
+   `RUN_COMMAND` service.
+3. Wait for the SOCKS5 listener and perform an HTTPS request through it.
+4. Establish the Android TUN interface and start `hev-socks5-tunnel`.
+5. Report **Connected** only when all stages are running.
+
+Disconnect reverses those steps and validates the recorded PID's command line
+before sending it a termination signal.
+
+## Security boundaries and limitations
+
+- The current release is not yet verified with physical-device packet captures,
+  captive portals, network changes, OEM background restrictions, or every Aether
+  protocol. It therefore does **not** claim verified DNS-leak protection.
+- Android's per-application VPN exclusion is used for `com.termux` and this app.
+  Consequently, unrelated Termux traffic also bypasses the tunnel.
+- If Aether or the SOCKS/HTTPS health check fails repeatedly, the app tears down
+  the VPN instead of leaving a false **Connected** state. This is not Android's
+  always-on lockdown mode.
+- Aether still requires its one-time interactive installation and any upstream
+  configuration/identity it normally needs. The companion does not embed
+  credentials or secrets.
+- The beta APK published on GitHub is debug-signed. Android will not treat a
+  later production-signed APK as an in-place update to that debug build.
+
+## Native dependency
+
+The bundled AAR is the official `hev-socks5-tunnel` 2.18.0 release under the MIT
+license. Its SHA-256 is:
 
 ```text
-aether --masque --scan balanced -4 --noize firewall \
-  --bind 127.0.0.1:1819 --quick-reconnect --h3
+15ec8ed121663b562c99caa5bb602d1009f24e5b09e733438b81988f12feaaab
 ```
 
-For MASQUE, the friendly camouflage choices map to Aether's `firewall`, `gfw`, and `off` profiles. For WireGuard/gool they map to `balanced`, `aggressive`, `light`, and `off`.
+The license text is included at `app/src/main/assets/third_party_licenses.txt`.
 
-## Build
+## Build and test
 
-Requirements:
-
-- JDK 17 or newer
-- Android SDK Platform 35 and Build Tools
-
-Open the folder in Android Studio and build the `app` module, or run:
+Requirements: JDK 17, Android SDK Platform 35 and Build Tools 35.0.0.
 
 ```bash
-./gradlew assembleDebug
+./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-The APK will be at `app/build/outputs/apk/debug/app-debug.apk`.
+The APK is produced at `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions
+runs the same tests, lint checks and build on each push.
 
-## Project notes
+## Project details
 
-- Minimum Android version: 8.0 (API 26)
+- Minimum Android version: Android 10 (API 29), required by the official native
+  tunnel AAR.
 - Application ID: `app.aether.companion`
-- No third-party Android libraries or analytics
-- Network permission is used only to probe the local SOCKS5 listener
-- Termux package visibility and `com.termux.permission.RUN_COMMAND` are declared in the manifest
+- Native ABIs: arm64-v8a, armeabi-v7a, x86 and x86_64
+- No analytics and no hardcoded VPN credentials
 
-## Sources checked
+## Primary documentation
 
-- [Aether README and Android installer](https://github.com/CluvexStudio/Aether/blob/main/README.md)
-- [Aether complete guide and v2.1.0 flags](https://github.com/CluvexStudio/Aether/blob/main/Docs/GUIDE.en.md)
-- [Termux RUN_COMMAND intent contract](https://github.com/termux/termux-app/wiki/RUN_COMMAND-Intent)
+- [Android VPN developer guide](https://developer.android.com/develop/connectivity/vpn)
+- [Android VpnService.Builder reference](https://developer.android.com/reference/android/net/VpnService.Builder)
+- [hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel)
+- [Aether README](https://github.com/CluvexStudio/Aether)
+- [Termux RUN_COMMAND contract](https://github.com/termux/termux-app/wiki/RUN_COMMAND-Intent)

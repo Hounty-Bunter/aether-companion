@@ -9,11 +9,13 @@ import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.net.VpnService;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -25,6 +27,7 @@ import hev.htproxy.TProxyService;
 public final class AetherVpnService extends VpnService {
     static final String ACTION_CONNECT = "app.aether.companion.CONNECT";
     static final String ACTION_DISCONNECT = "app.aether.companion.DISCONNECT";
+    private static final String ACTION_PREFLIGHT_RESULT = "app.aether.companion.PREFLIGHT_RESULT";
 
     private static final String CHANNEL_ID = "aether_vpn";
     private static final int NOTIFICATION_ID = 1819;
@@ -38,6 +41,10 @@ public final class AetherVpnService extends VpnService {
     private TermuxCommandClient termux;
     private volatile int activePort = 1819;
     private volatile int failedHealthChecks;
+    private volatile CountDownLatch preflightLatch;
+    private volatile int preflightExitCode = Integer.MIN_VALUE;
+    private volatile String preflightOutput = "";
+    private volatile int healthTick;
 
     @Override
     public void onCreate() {
@@ -49,10 +56,19 @@ public final class AetherVpnService extends VpnService {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? null : intent.getAction();
+        if (ACTION_PREFLIGHT_RESULT.equals(action)) {
+            acceptPreflightResult(intent);
+            return START_STICKY;
+        }
         if (ACTION_DISCONNECT.equals(action)) {
             startForegroundCompat(notification("Disconnecting", "Closing the VPN safely"));
             worker.execute(() -> disconnect(false, "Disconnected"));
             return START_NOT_STICKY;
+        }
+
+        if (ACTION_CONNECT.equals(action) && tunFd != null && TProxyService.TProxyIsRunning()) {
+            startForegroundCompat(notification("Connected", "Aether VPN is active"));
+            return START_STICKY;
         }
 
         startForegroundCompat(notification("Connecting", "Starting Aether"));
@@ -72,6 +88,7 @@ public final class AetherVpnService extends VpnService {
 
             if (!termux.isInstalled()) throw new IllegalStateException("Termux is not installed");
             if (!termux.hasPermission()) throw new SecurityException("Termux command permission is missing");
+            verifyAetherInstallation();
 
             AetherSettings settings = AetherSettings.load(
                     getSharedPreferences(VpnStateStore.PREFS, MODE_PRIVATE));
@@ -136,6 +153,41 @@ public final class AetherVpnService extends VpnService {
         throw new IllegalStateException("Aether did not become ready within three minutes");
     }
 
+    private void verifyAetherInstallation() throws Exception {
+        updateConnecting("Checking the Aether installation");
+        preflightExitCode = Integer.MIN_VALUE;
+        preflightOutput = "";
+        preflightLatch = new CountDownLatch(1);
+        Intent result = new Intent(this, AetherVpnService.class).setAction(ACTION_PREFLIGHT_RESULT);
+        PendingIntent pending = PendingIntent.getService(this, 91, result,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+        termux.checkAetherInstallation(pending);
+        if (!preflightLatch.await(15, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Termux did not answer. Run the first-time setup and use Termux 0.109 or newer");
+        }
+        if (preflightExitCode == 20 || preflightOutput.contains("AETHER_MISSING")) {
+            throw new IllegalStateException("Aether is not installed in Termux; run the first-time setup");
+        }
+        if (preflightExitCode != 0) {
+            throw new IllegalStateException("Termux could not verify Aether" +
+                    (preflightOutput.isEmpty() ? "" : ": " + preflightOutput));
+        }
+        VpnStateStore.log(this, "Aether executable verified");
+    }
+
+    private void acceptPreflightResult(Intent intent) {
+        Bundle result = intent.getBundleExtra("result");
+        if (result != null) {
+            preflightExitCode = result.getInt("exitCode", Integer.MIN_VALUE);
+            String stdout = result.getString("stdout", "").trim();
+            String stderr = result.getString("stderr", "").trim();
+            String error = result.getString("errmsg", "").trim();
+            preflightOutput = !stdout.isEmpty() ? stdout : (!stderr.isEmpty() ? stderr : error);
+        }
+        CountDownLatch latch = preflightLatch;
+        if (latch != null) latch.countDown();
+    }
+
     private void establishVpn() throws Exception {
         Builder builder = new Builder()
                 .setSession("Aether Companion")
@@ -192,11 +244,23 @@ public final class AetherVpnService extends VpnService {
     private void startHealthMonitor() {
         stopHealthMonitor();
         failedHealthChecks = 0;
+        healthTick = 0;
         monitor = Executors.newSingleThreadScheduledExecutor();
         monitor.scheduleWithFixedDelay(() -> {
             boolean healthy = TProxyService.TProxyIsRunning() && SocksProbe.isListening(activePort);
+            if (healthy && ++healthTick % 5 == 0) {
+                try {
+                    SocksHttpsProbe.Result result = SocksHttpsProbe.verify(activePort);
+                    getSharedPreferences(VpnStateStore.PREFS, MODE_PRIVATE).edit()
+                            .putString("vpnExitIp", result.ip)
+                            .apply();
+                } catch (Exception ignored) {
+                    healthy = false;
+                }
+            }
             if (healthy) {
                 failedHealthChecks = 0;
+                VpnStateStore.heartbeat(this);
                 return;
             }
             if (++failedHealthChecks >= 3) {
@@ -215,7 +279,7 @@ public final class AetherVpnService extends VpnService {
         cleanupTunnel();
         try { termux.stopAether(); } catch (Exception ignored) {}
         VpnStateStore.desired(this, false);
-        stopForeground(false);
+        stopForeground(true);
         stopSelf();
     }
 
@@ -314,6 +378,7 @@ public final class AetherVpnService extends VpnService {
     @Override
     public void onDestroy() {
         if (tunFd != null || TProxyService.TProxyIsRunning()) cleanupTunnel();
+        try { termux.stopAether(); } catch (Exception ignored) {}
         worker.shutdownNow();
         super.onDestroy();
     }

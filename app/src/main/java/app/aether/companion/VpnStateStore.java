@@ -20,8 +20,22 @@ final class VpnStateStore {
 
     static Snapshot read(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String state = prefs.getString("vpnState", DISCONNECTED);
+        long heartbeat = prefs.getLong("vpnHeartbeat", 0L);
+        if (CONNECTED.equals(state) && heartbeat > 0L &&
+                System.currentTimeMillis() - heartbeat > 15_000L) {
+            String message = "VPN service is no longer responding";
+            prefs.edit()
+                    .putString("vpnState", ERROR)
+                    .putString("vpnDetail", message)
+                    .putString("vpnExitIp", "—")
+                    .putLong("vpnConnectedAt", 0L)
+                    .putBoolean("vpnDesired", false)
+                    .apply();
+            state = ERROR;
+        }
         return new Snapshot(
-                prefs.getString("vpnState", DISCONNECTED),
+                state,
                 prefs.getString("vpnDetail", ""),
                 prefs.getString("vpnExitIp", "—"),
                 prefs.getLong("vpnConnectedAt", 0L),
@@ -36,6 +50,7 @@ final class VpnStateStore {
                 .putString("vpnDetail", detail);
         if (!CONNECTED.equals(state)) {
             editor.putLong("vpnConnectedAt", 0L);
+            editor.putLong("vpnHeartbeat", 0L);
             editor.putString("vpnExitIp", "—");
         }
         editor.apply();
@@ -47,6 +62,13 @@ final class VpnStateStore {
                 .putString("vpnDetail", "Device traffic is routed through Aether")
                 .putString("vpnExitIp", exitIp == null || exitIp.isEmpty() ? "Verified" : exitIp)
                 .putLong("vpnConnectedAt", System.currentTimeMillis())
+                .putLong("vpnHeartbeat", System.currentTimeMillis())
+                .apply();
+    }
+
+    static void heartbeat(Context context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putLong("vpnHeartbeat", System.currentTimeMillis())
                 .apply();
     }
 
