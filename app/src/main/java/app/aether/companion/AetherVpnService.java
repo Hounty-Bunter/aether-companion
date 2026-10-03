@@ -33,6 +33,8 @@ public final class AetherVpnService extends VpnService {
     private static final int NOTIFICATION_ID = 1819;
     private static final int MTU = 1500;
     private static final int SOCKS_WAIT_SECONDS = 180;
+    private static final int TERMUX_RESULT_TIMEOUT_SECONDS = 15;
+    private static final int AETHER_INSTALL_TIMEOUT_SECONDS = 600;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final AtomicBoolean transition = new AtomicBoolean(false);
@@ -87,11 +89,18 @@ public final class AetherVpnService extends VpnService {
             updateConnecting("Checking required components");
 
             if (!termux.isInstalled()) throw new IllegalStateException("Termux is not installed");
+            if (!termux.hasTrustedSignature()) {
+                throw new SecurityException("The installed Termux signature is not an official trusted release");
+            }
             if (!termux.hasPermission()) throw new SecurityException("Termux command permission is missing");
-            verifyAetherInstallation();
+            ensureAetherInstallation();
 
+            updateConnecting("Applying Aether connection settings");
             AetherSettings settings = AetherSettings.load(
                     getSharedPreferences(VpnStateStore.PREFS, MODE_PRIVATE));
+            getSharedPreferences(VpnStateStore.PREFS, MODE_PRIVATE).edit()
+                    .putBoolean("aetherConfigured", true)
+                    .apply();
             activePort = settings.port;
 
             if (SocksProbe.isListening(activePort)) {
@@ -153,26 +162,76 @@ public final class AetherVpnService extends VpnService {
         throw new IllegalStateException("Aether did not become ready within three minutes");
     }
 
-    private void verifyAetherInstallation() throws Exception {
+    private void ensureAetherInstallation() throws Exception {
         updateConnecting("Checking the Aether installation");
+        requestTermuxResult(91);
+        termux.checkAetherInstallation(preflightPendingIntent);
+        awaitTermuxResult(TERMUX_RESULT_TIMEOUT_SECONDS,
+                "Termux did not answer. Complete the one-time authorization setup and use Termux 0.109 or newer");
+        if (preflightExitCode == 20 || preflightOutput.contains("AETHER_MISSING")) {
+            installAetherAutomatically();
+            return;
+        }
+        requireSuccessfulTermuxResult("Termux could not verify Aether");
+        markAetherInstalled();
+        VpnStateStore.log(this, "Existing Aether executable verified and preserved");
+    }
+
+    private PendingIntent preflightPendingIntent;
+
+    private void requestTermuxResult(int requestCode) {
         preflightExitCode = Integer.MIN_VALUE;
         preflightOutput = "";
         preflightLatch = new CountDownLatch(1);
         Intent result = new Intent(this, AetherVpnService.class).setAction(ACTION_PREFLIGHT_RESULT);
-        PendingIntent pending = PendingIntent.getService(this, 91, result,
+        preflightPendingIntent = PendingIntent.getService(this, requestCode, result,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
-        termux.checkAetherInstallation(pending);
-        if (!preflightLatch.await(15, TimeUnit.SECONDS)) {
-            throw new IllegalStateException("Termux did not answer. Run the first-time setup and use Termux 0.109 or newer");
+    }
+
+    private void installAetherAutomatically() throws Exception {
+        updateConnecting("Installing required Termux packages");
+        VpnStateStore.log(this, "Using the pinned official Aether installer with SHA-256 verification");
+        requestTermuxResult(92);
+        termux.installDependencies(preflightPendingIntent);
+        awaitTermuxResult(300, "Termux dependency installation timed out");
+        requireSuccessfulTermuxResult("Termux dependency installation failed");
+
+        updateConnecting("Installing verified Aether release");
+        requestTermuxResult(93);
+        termux.installAether(preflightPendingIntent);
+        awaitTermuxResult(AETHER_INSTALL_TIMEOUT_SECONDS,
+                "Aether installation timed out; check the Termux network connection");
+        requireSuccessfulTermuxResult("Automatic Aether installation failed");
+
+        requestTermuxResult(94);
+        termux.checkAetherInstallation(preflightPendingIntent);
+        awaitTermuxResult(TERMUX_RESULT_TIMEOUT_SECONDS,
+                "Termux did not answer after installing Aether");
+        requireSuccessfulTermuxResult("Aether installation could not be verified");
+        markAetherInstalled();
+        VpnStateStore.log(this, "Aether installed and executable verified");
+    }
+
+    private void awaitTermuxResult(int timeoutSeconds, String timeoutMessage) throws Exception {
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            if (preflightLatch.await(1, TimeUnit.SECONDS)) return;
+            if (!VpnStateStore.isDesired(this)) throw new InterruptedException("Connection cancelled");
         }
-        if (preflightExitCode == 20 || preflightOutput.contains("AETHER_MISSING")) {
-            throw new IllegalStateException("Aether is not installed in Termux; run the first-time setup");
-        }
+        throw new IllegalStateException(timeoutMessage);
+    }
+
+    private void requireSuccessfulTermuxResult(String prefix) {
         if (preflightExitCode != 0) {
-            throw new IllegalStateException("Termux could not verify Aether" +
+            throw new IllegalStateException(prefix +
                     (preflightOutput.isEmpty() ? "" : ": " + preflightOutput));
         }
-        VpnStateStore.log(this, "Aether executable verified");
+    }
+
+    private void markAetherInstalled() {
+        getSharedPreferences(VpnStateStore.PREFS, MODE_PRIVATE).edit()
+                .putBoolean("aetherInstalled", true)
+                .apply();
     }
 
     private void acceptPreflightResult(Intent intent) {
@@ -182,7 +241,10 @@ public final class AetherVpnService extends VpnService {
             String stdout = result.getString("stdout", "").trim();
             String stderr = result.getString("stderr", "").trim();
             String error = result.getString("errmsg", "").trim();
-            preflightOutput = !stdout.isEmpty() ? stdout : (!stderr.isEmpty() ? stderr : error);
+            String output = preflightExitCode != 0 && !stderr.isEmpty()
+                    ? stderr : (!stdout.isEmpty() ? stdout : error);
+            preflightOutput = output.length() > 2000
+                    ? output.substring(output.length() - 2000) : output;
         }
         CountDownLatch latch = preflightLatch;
         if (latch != null) latch.countDown();

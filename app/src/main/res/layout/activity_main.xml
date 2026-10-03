@@ -153,6 +153,65 @@
                 android:text="@string/setup_body"
                 style="@style/Text.Body" />
 
+            <TextView
+                android:id="@+id/termuxStep"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/step_termux"
+                style="@style/Text.Body" />
+
+            <TextView
+                android:id="@+id/permissionStep"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/step_permissions"
+                style="@style/Text.Body" />
+
+            <TextView
+                android:id="@+id/aetherStep"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/step_aether"
+                style="@style/Text.Body" />
+
+            <TextView
+                android:id="@+id/configStep"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/step_configured"
+                style="@style/Text.Body" />
+
+            <TextView
+                android:id="@+id/vpnStep"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/step_vpn"
+                style="@style/Text.Body" />
+
+            <TextView
+                android:id="@+id/downloadProgress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/termux_download_authenticity"
+                style="@style/Text.Body" />
+
+            <Button
+                android:id="@+id/downloadTermuxButton"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/button_primary"
+                android:text="@string/download_termux"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textStyle="bold" />
+
             <Button
                 android:id="@+id/copySetupButton"
                 android:layout_width="match_parent"

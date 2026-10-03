@@ -2,6 +2,7 @@ package app.aether.companion;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.DownloadManager;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
@@ -25,22 +26,24 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
     private static final int REQUEST_TERMUX_PERMISSION = 41;
     private static final int REQUEST_NOTIFICATION_PERMISSION = 42;
     private static final int REQUEST_VPN_PERMISSION = 43;
     private static final String SETUP_COMMAND =
-            "mkdir -p ~/.termux && grep -qxF 'allow-external-apps=true' ~/.termux/termux.properties 2>/dev/null || " +
-            "echo 'allow-external-apps=true' >> ~/.termux/termux.properties; " +
-            "termux-reload-settings 2>/dev/null || true; " +
-            "curl -fsSL https://raw.githubusercontent.com/CluvexStudio/Aether/main/aether.sh -o ~/aether.sh && " +
-            "chmod +x ~/aether.sh && ~/aether.sh install";
+            "mkdir -p ~/.termux; touch ~/.termux/termux.properties; " +
+            "sed -i '/^[[:space:]]*allow-external-apps[[:space:]]*=/d' ~/.termux/termux.properties; " +
+            "echo 'allow-external-apps=true' >> ~/.termux/termux.properties; termux-reload-settings";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final ExecutorService setupWorker = Executors.newSingleThreadExecutor();
     private SharedPreferences preferences;
     private TermuxCommandClient termux;
     private boolean resumed;
+    private boolean returningFromTermuxSetup;
 
     private View statusDot;
     private TextView statusTitle;
@@ -52,6 +55,13 @@ public final class MainActivity extends Activity {
     private LinearLayout setupCard;
     private LinearLayout settingsCard;
     private LinearLayout masqueOptions;
+    private TextView termuxStep;
+    private TextView permissionStep;
+    private TextView aetherStep;
+    private TextView configStep;
+    private TextView vpnStep;
+    private TextView downloadProgress;
+    private Button downloadTermuxButton;
     private Spinner protocolSpinner;
     private Spinner scanSpinner;
     private Spinner ipSpinner;
@@ -64,6 +74,7 @@ public final class MainActivity extends Activity {
     private final Runnable renderLoop = new Runnable() {
         @Override public void run() {
             render(VpnStateStore.read(MainActivity.this));
+            refreshSetupCard();
             if (resumed) handler.postDelayed(this, 1000);
         }
     };
@@ -88,6 +99,14 @@ public final class MainActivity extends Activity {
         refreshSetupCard();
         handler.removeCallbacks(renderLoop);
         handler.post(renderLoop);
+        maybeContinueTermuxInstall();
+        if (returningFromTermuxSetup) {
+            returningFromTermuxSetup = false;
+            if (preferences.getBoolean("pendingConnect", false) &&
+                    preferences.getBoolean("setupAcknowledged", false)) {
+                handler.postDelayed(this::beginConnect, 500);
+            }
+        }
     }
 
     @Override
@@ -117,6 +136,13 @@ public final class MainActivity extends Activity {
         fragmentCheck = findViewById(R.id.fragmentCheck);
         quickReconnectCheck = findViewById(R.id.quickReconnectCheck);
         portInput = findViewById(R.id.portInput);
+        termuxStep = findViewById(R.id.termuxStep);
+        permissionStep = findViewById(R.id.permissionStep);
+        aetherStep = findViewById(R.id.aetherStep);
+        configStep = findViewById(R.id.configStep);
+        vpnStep = findViewById(R.id.vpnStep);
+        downloadProgress = findViewById(R.id.downloadProgress);
+        downloadTermuxButton = findViewById(R.id.downloadTermuxButton);
     }
 
     private void restoreSettings() {
@@ -142,6 +168,7 @@ public final class MainActivity extends Activity {
         findViewById(R.id.copySetupButton).setOnClickListener(view -> copySetupCommand());
         findViewById(R.id.openTermuxButton).setOnClickListener(view -> openTermux());
         findViewById(R.id.permissionButton).setOnClickListener(view -> requestTermuxPermission());
+        downloadTermuxButton.setOnClickListener(view -> handleTermuxDownloadButton());
 
         protocolSpinner.setOnItemSelectedListener(new SimpleSelectionListener() {
             @Override public void selected() { updateConditionalSettings(); saveSettings(false); }
@@ -152,13 +179,23 @@ public final class MainActivity extends Activity {
     }
 
     private void beginConnect() {
+        preferences.edit().putBoolean("pendingConnect", true).apply();
         if (!termux.isInstalled()) {
             toast(R.string.termux_missing);
             setupCard.setVisibility(View.VISIBLE);
             return;
         }
+        if (!termux.hasTrustedSignature()) {
+            toast(R.string.termux_untrusted);
+            return;
+        }
         if (!termux.hasPermission()) {
             requestTermuxPermission();
+            return;
+        }
+        if (!preferences.getBoolean("setupAcknowledged", false)) {
+            toast(R.string.external_apps_missing);
+            setupCard.setVisibility(View.VISIBLE);
             return;
         }
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -187,6 +224,7 @@ public final class MainActivity extends Activity {
     }
 
     private void startVpn() {
+        preferences.edit().putBoolean("pendingConnect", false).apply();
         Intent intent = new Intent(this, AetherVpnService.class).setAction(AetherVpnService.ACTION_CONNECT);
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
         else startService(intent);
@@ -285,9 +323,114 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshSetupCard() {
-        boolean acknowledged = preferences.getBoolean("setupAcknowledged", false);
-        boolean ready = termux.isInstalled() && termux.hasPermission() && acknowledged;
+        boolean installed = termux.isInstalled();
+        boolean trusted = installed && termux.hasTrustedSignature();
+        boolean permission = trusted && termux.hasPermission();
+        boolean acknowledged = permission && preferences.getBoolean("setupAcknowledged", false);
+        boolean aetherInstalled = preferences.getBoolean("aetherInstalled", false);
+        boolean configured = preferences.getBoolean("aetherConfigured", false);
+        boolean vpnReady = VpnStateStore.CONNECTED.equals(VpnStateStore.read(this).state);
+        boolean ready = installed && trusted && permission && acknowledged && aetherInstalled && configured;
         setupCard.setVisibility(ready ? View.GONE : View.VISIBLE);
+        termuxStep.setText(step(installed && trusted,
+                installed && !trusted ? getString(R.string.step_termux_untrusted) : getString(R.string.step_termux)));
+        permissionStep.setText(step(permission && acknowledged, getString(R.string.step_permissions)));
+        aetherStep.setText(step(aetherInstalled, getString(R.string.step_aether)));
+        configStep.setText(step(configured, getString(R.string.step_configured)));
+        vpnStep.setText(step(vpnReady, getString(R.string.step_vpn)));
+
+        downloadTermuxButton.setVisibility(installed ? View.GONE : View.VISIBLE);
+        findViewById(R.id.copySetupButton).setVisibility(permission ? View.VISIBLE : View.GONE);
+        findViewById(R.id.openTermuxButton).setVisibility(installed ? View.VISIBLE : View.GONE);
+        findViewById(R.id.permissionButton).setVisibility(installed && !permission ? View.VISIBLE : View.GONE);
+        updateDownloadProgress(installed);
+    }
+
+    private String step(boolean complete, String label) {
+        return (complete ? "✓  " : "○  ") + label;
+    }
+
+    private void updateDownloadProgress(boolean installed) {
+        if (installed) {
+            downloadProgress.setVisibility(View.GONE);
+            return;
+        }
+        TermuxInstaller.DownloadStatus status = TermuxInstaller.query(this);
+        String installStatus = preferences.getString("termuxInstallStatus", "");
+        if ("error".equals(installStatus)) {
+            downloadProgress.setVisibility(View.VISIBLE);
+            downloadProgress.setText(preferences.getString("termuxInstallError",
+                    getString(R.string.termux_install_failed)));
+            downloadTermuxButton.setEnabled(true);
+            downloadTermuxButton.setText(status.status == DownloadManager.STATUS_SUCCESSFUL
+                    ? R.string.install_termux : R.string.download_termux);
+        } else if (status.status == DownloadManager.STATUS_RUNNING ||
+                status.status == DownloadManager.STATUS_PENDING ||
+                status.status == DownloadManager.STATUS_PAUSED) {
+            downloadProgress.setVisibility(View.VISIBLE);
+            downloadProgress.setText(getString(R.string.termux_download_progress, status.percent));
+            downloadTermuxButton.setEnabled(false);
+            downloadTermuxButton.setText(R.string.downloading_termux);
+        } else if (status.status == DownloadManager.STATUS_SUCCESSFUL &&
+                !"installing".equals(installStatus) && !"verifying".equals(installStatus)) {
+            downloadProgress.setVisibility(View.VISIBLE);
+            downloadProgress.setText(R.string.termux_download_verified_hint);
+            downloadTermuxButton.setEnabled(true);
+            downloadTermuxButton.setText(R.string.install_termux);
+        } else if ("installing".equals(installStatus) || "verifying".equals(installStatus)) {
+            downloadProgress.setVisibility(View.VISIBLE);
+            downloadProgress.setText("verifying".equals(installStatus)
+                    ? R.string.verifying_termux : R.string.waiting_for_installer);
+            downloadTermuxButton.setEnabled(false);
+        } else {
+            downloadProgress.setVisibility(View.VISIBLE);
+            String error = preferences.getString("termuxInstallError", status.error);
+            downloadProgress.setText(error == null || error.isEmpty()
+                    ? getString(R.string.termux_download_authenticity) : error);
+            downloadTermuxButton.setEnabled(true);
+            downloadTermuxButton.setText(R.string.download_termux);
+        }
+    }
+
+    private void handleTermuxDownloadButton() {
+        TermuxInstaller.DownloadStatus status = TermuxInstaller.query(this);
+        if (status.status == DownloadManager.STATUS_SUCCESSFUL) {
+            continueTermuxInstall();
+            return;
+        }
+        try {
+            TermuxInstaller.enqueue(this);
+            preferences.edit().putBoolean("pendingConnect", true).apply();
+            refreshSetupCard();
+        } catch (Exception error) {
+            TermuxInstaller.setError(this, error.getMessage());
+            refreshSetupCard();
+        }
+    }
+
+    private void continueTermuxInstall() {
+        if (!getPackageManager().canRequestPackageInstalls()) {
+            preferences.edit().putString("termuxInstallStatus", "waiting_permission").apply();
+            startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + getPackageName())));
+            return;
+        }
+        preferences.edit().putString("termuxInstallStatus", "verifying").apply();
+        setupWorker.execute(() -> {
+            try {
+                TermuxInstaller.verifyAndRequestInstall(this);
+            } catch (Exception error) {
+                TermuxInstaller.setError(this, error.getMessage());
+            }
+            handler.post(this::refreshSetupCard);
+        });
+    }
+
+    private void maybeContinueTermuxInstall() {
+        if ("waiting_permission".equals(preferences.getString("termuxInstallStatus", "")) &&
+                getPackageManager().canRequestPackageInstalls()) {
+            continueTermuxInstall();
+        }
     }
 
     private void copySetupCommand() {
@@ -306,6 +449,8 @@ public final class MainActivity extends Activity {
                     Uri.parse("https://f-droid.org/packages/com.termux/")));
             return;
         }
+        preferences.edit().putBoolean("pendingConnect", true).apply();
+        returningFromTermuxSetup = true;
         startActivity(launch);
     }
 
@@ -343,6 +488,12 @@ public final class MainActivity extends Activity {
 
     private void toast(int stringId) {
         Toast.makeText(this, stringId, Toast.LENGTH_LONG).show();
+    }
+
+    @Override
+    protected void onDestroy() {
+        setupWorker.shutdownNow();
+        super.onDestroy();
     }
 
     private abstract static class SimpleSelectionListener implements AdapterView.OnItemSelectedListener {
